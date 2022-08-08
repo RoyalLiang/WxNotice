@@ -1,0 +1,7 @@
+
+__pycache__/
+.idea/
+logs/*
+*.py[cod]
+secure.py
+test*.py
