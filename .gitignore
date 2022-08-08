@@ -1,7 +1,7 @@
 
 __pycache__/
 .idea/
-logs/*
+logs/
 *.py[cod]
 secure.py
 test*.py
