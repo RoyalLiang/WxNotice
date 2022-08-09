@@ -3,6 +3,7 @@ import traceback
 from urllib.parse import urlencode
 
 import requests
+from django.db import connection
 
 from WeChatNotice.secure import WX_ACCESS_TOKEN_URL
 from libs.enums import WxAccountStatusEnum
@@ -36,6 +37,7 @@ class WxPubHandler:
             except Exception:
                 print(f"process error, msg: {traceback.format_exc()}")
             finally:
+                connection.close()
                 time.sleep(DEFAULT_SLEEP_TIME)
 
     def _get_account_access_token(self, account):
