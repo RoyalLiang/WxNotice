@@ -5,17 +5,18 @@ from urllib.parse import urlencode
 import requests
 from django.db import connection
 
-from WeChatNotice.secure import WX_ACCESS_TOKEN_URL
+from WeChatNotice.secure import WX_ACCESS_TOKEN_URL, WX_USER_LIST_URL, WX_USER_DETAIL_URL
 from libs.enums import WxAccountStatusEnum
 from libs.rdb import connect_redis
 from WeChatNotice.settings import REDIS_HOST, REDIS_PORT, REDIS_PWD, REDIS_DB, REDIS_WX_ACCESS_TOKEN_PREFIX, \
     DEFAULT_SLEEP_TIME
-from wx.models import WxAccountModel
+from wx.models import WxAccountModel, WxPubAccountUserModel
 
 
-class WxPubHandler:
+class WxBaseHandler:
 
     def __init__(self, r_host=REDIS_HOST, rp=REDIS_PORT, rdb=REDIS_DB, rpwd=REDIS_PWD, **kwargs):
+        self.acc = None
         self.r_host = r_host
         self.rp = rp
         self.rdb = rdb
@@ -28,12 +29,16 @@ class WxPubHandler:
         else:
             self.redis = connect_redis(self.r_host, self.rp, self.rdb)
 
+
+class WxPubHandler(WxBaseHandler):
+
     def get_access_token(self):
         while True:
             try:
                 accounts = WxAccountModel.objects.filter(status=WxAccountStatusEnum.ACTIVE)
                 for a in accounts:
                     self._get_account_access_token(a)
+                    user_handler.get_wx_users(a)
             except Exception:
                 print(f"process error, msg: {traceback.format_exc()}")
             finally:
@@ -47,6 +52,7 @@ class WxPubHandler:
             self._request_to_wx(account, key)
         else:
             print('get access token success')
+            account.acc = value
 
     def _request_to_wx(self, account, key):
         url = WX_ACCESS_TOKEN_URL + f'&{urlencode(dict(appid=account.app_id, secret=account.app_secret))}'
@@ -58,6 +64,7 @@ class WxPubHandler:
                 print(f'error, code: {result["errcode"]}, msg: {result["errmsg"]}')
             else:
                 self.redis.setex(key, result['expires_in'], result['access_token'])
+                account.acc = result['access_token']
         except Exception:
             print(traceback.format_exc())
 
@@ -65,4 +72,26 @@ class WxPubHandler:
         pass
 
 
+class WxPubAccountUserHandler(WxBaseHandler):
+
+    def get_wx_users(self, account):
+        url = WX_USER_LIST_URL.format(account.app_id, '')
+        r = requests.get(url)
+        users = r.json()
+        if err := users.get('errcode'):
+            print(f'error, code: {err}, msg: {users["errmsg"]}')
+        else:
+            print(f'get users: {users}')
+            for u in users['openid']:
+                user_url = WX_USER_DETAIL_URL.format(self.acc, u)
+                r = requests.get(user_url)
+                user = r.json()
+                self._process_user(account, user)
+
+    @staticmethod
+    def _process_user(account, user):
+        WxPubAccountUserModel.save_or_update(account, user)
+
+
 wx_handler = WxPubHandler()
+user_handler = WxPubAccountUserHandler()

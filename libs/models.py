@@ -7,3 +7,13 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
+
+    @staticmethod
+    def trans_fields(data, mapping, reverse=False):
+        r = dict()
+        for m in mapping:
+            if reverse:
+                r[0] = data.get(m[-1])
+            else:
+                r[-1] = data.get(m[0])
+        return r
