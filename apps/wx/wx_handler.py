@@ -10,6 +10,7 @@ from libs.enums import WxAccountStatusEnum
 from libs.rdb import connect_redis
 from WeChatNotice.settings import REDIS_HOST, REDIS_PORT, REDIS_PWD, REDIS_DB, REDIS_WX_ACCESS_TOKEN_PREFIX, \
     DEFAULT_SLEEP_TIME
+from .wechat import wechat
 from wx.models import WxAccountModel, WxPubAccountUserModel
 
 
@@ -55,16 +56,11 @@ class WxPubHandler(WxBaseHandler):
             account.acc = value
 
     def _request_to_wx(self, account, key):
-        url = WX_ACCESS_TOKEN_URL + f'&{urlencode(dict(appid=account.app_id, secret=account.app_secret))}'
-        r = requests.get(url)
+        params = dict(appid=account.app_id, secret=account.app_secret)
+        r = wechat.get_acc_token(WX_ACCESS_TOKEN_URL, params)
         try:
-            result = r.json()
-            print(f'get result: {result}')
-            if result.get('errcode'):
-                print(f'error, code: {result["errcode"]}, msg: {result["errmsg"]}')
-            else:
-                self.redis.setex(key, result['expires_in'], result['access_token'])
-                account.acc = result['access_token']
+            self.redis.setex(key, r['expires_in'], r['access_token'])
+            account.acc = r['access_token']
         except Exception:
             print(traceback.format_exc())
 
